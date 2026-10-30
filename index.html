@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>5W1H Action Tracking Sheet</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Sarabun', 'sans-serif'] },
+                    colors: { primary: '#1e3a5f', secondary: '#2563eb' }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* จัดรูปแบบสำหรับการพิมพ์ PDF A4 แนวนอนโดยเฉพาะ */
+        @media print {
+            @page { 
+                size: A4 landscape; 
+                margin: 0 !important; /* นำระยะขอบออก */
+            }
+            body { 
+                -webkit-print-color-adjust: exact; 
+                print-color-adjust: exact; 
+                background-color: white !important; 
+                margin: 0 !important;
+                padding: 5mm !important; /* เว้นขอบเนื้อหานิดหน่อยไม่ให้ชิดขอบกระดาษเกินไป */
+                box-sizing: border-box;
+                zoom: 0.78; /* ปรับขนาดสเกลให้อัตโนมัติพอดีกับ A4 */
+            }
+            .print-hidden { display: none !important; }
+            .print-full-w { 
+                width: 100% !important; 
+                max-width: none !important; 
+                margin: 0 !important; 
+                border: none !important; 
+                box-shadow: none !important; 
+            }
+            .app-container { background: white !important; padding: 0 !important; }
+            
+            /* ปรับตารางให้พอดีหน้ากระดาษ */
+            table { width: 100% !important; table-layout: fixed; min-width: 0 !important; }
+            th, td { word-wrap: break-word; overflow-wrap: break-word; padding: 4px !important; }
+            textarea { resize: none; overflow: visible !important; height: auto !important; min-height: 20px !important; font-size: 13px; white-space: pre-wrap !important; word-wrap: break-word !important; }
+            input[type="date"] { font-size: 13px; }
+            
+            /* ซ่อนเมนูและการตกแต่งที่ไม่ได้ใช้ในกระดาษ */
+            #tabContainer, select, button, .animate-marquee { display: none !important; }
+        }
+
+        /* แอนิเมชันสำหรับข้อความวิ่งวิ่ง */
+        @keyframes marquee { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+        .animate-marquee { display: inline-block; animation: marquee 25s linear infinite; white-space: nowrap; }
+        
+        textarea::-webkit-scrollbar { width: 4px; }
+        textarea::-webkit-scrollbar-thumb { background-color: #94a3b8; border-radius: 4px; }
+        textarea:disabled, input:disabled { background-color: rgba(243, 244, 246, 0.5); cursor: not-allowed; }
+        
+        /* Spinner Loader */
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #1e3a5f; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-blue-50 font-sans text-sm text-blue-900 min-h-screen relative">
+
+    <!-- หน้า Login -->
+    <div id="loginScreen" class="fixed inset-0 bg-primary flex flex-col items-center justify-center z-50 transition-opacity duration-300">
+        <div class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-md border-4 border-blue-200 text-center relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-2 bg-blue-500"></div>
+            <img src="https://i.postimg.cc/qM0P2y4y/message-Image-1787986866051-Copy.jpg" alt="Logo" class="h-24 mx-auto mb-6 object-contain rounded shadow-sm border p-2" />
+            <h2 class="text-2xl font-bold text-primary mb-2">เข้าสู่ระบบ</h2>
+            <p class="text-gray-500 mb-6 text-sm">5W1H ACTION TRACKING SHEET</p>
+            
+            <div class="space-y-4">
+                <div>
+                    <input type="text" id="loginId" placeholder="ID (pemc)" class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 outline-none transition-colors text-center text-lg font-semibold" />
+                </div>
+                <div>
+                    <input type="password" id="loginPass" placeholder="Password" class="w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-blue-500 outline-none transition-colors text-center text-lg" />
+                </div>
+                <div id="loginError" class="text-red-500 text-sm hidden font-medium">ID หรือ Password ไม่ถูกต้อง!</div>
+                <button onclick="handleLogin()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg transition-transform transform hover:scale-105 active:scale-95">
+                    เข้าสู่ระบบ
+                </button>
+            </div>
+            <div class="mt-8 text-xs text-gray-400">พัฒนาโดย ฝ่าย PE | Able Medical Company Limited</div>
+        </div>
+    </div>
+
+    <!-- โหลดดิง Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center z-40 hidden">
+        <div class="loader mb-4"></div>
+        <div class="text-primary font-bold text-lg animate-pulse" id="loadingText">กำลังเชื่อมต่อข้อมูล...</div>
+    </div>
+
+    <!-- หน้าต่างแอปหลัก -->
+    <div id="appContainer" class="hidden app-container p-2 md:p-4">
+        <div class="max-w-[1500px] mx-auto bg-white shadow-xl rounded-lg overflow-hidden border-2 border-primary print-full-w flex flex-col">
+            
+            <!-- เมนูบาร์ -->
+            <div class="bg-blue-100 p-2 flex flex-col md:flex-row justify-between md:items-center gap-4 border-b-2 border-primary print-hidden">
+                <div class="flex gap-2" id="tabContainer">
+                    <button data-tab="PD1" class="tab-btn px-6 py-2 rounded-t-lg font-bold text-lg border-2 border-b-0 transition-colors bg-primary text-white border-primary">PD1 Data</button>
+                    <button data-tab="PD2" class="tab-btn px-6 py-2 rounded-t-lg font-bold text-lg border-2 border-b-0 transition-colors bg-white text-primary border-primary hover:bg-blue-50">PD2 Data</button>
+                    <button data-tab="PD3" class="tab-btn px-6 py-2 rounded-t-lg font-bold text-lg border-2 border-b-0 transition-colors bg-white text-primary border-primary hover:bg-blue-50">PD3 Data</button>
+                </div>
+                
+                <div class="flex items-center gap-4 flex-wrap">
+                    <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded shadow-sm border border-primary">
+                        <span class="font-semibold text-primary">ตัวกรองเวลา:</span>
+                        <select id="filterType" class="border-blue-300 border p-1 rounded outline-none text-primary font-medium bg-white">
+                            <option value="MONTH">รายเดือน (Month)</option>
+                            <option value="DAY">รายวัน (Day)</option>
+                        </select>
+                        <input type="month" id="filterMonth" class="border border-blue-300 p-1 rounded outline-none text-primary bg-white" />
+                        <input type="date" id="filterDay" class="hidden border border-blue-300 p-1 rounded outline-none text-primary bg-white" />
+                    </div>
+                    <button onclick="syncDataFromSheet()" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded shadow flex items-center gap-1 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> รีเฟรช
+                    </button>
+                    <button onclick="handleLogout()" class="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded shadow font-semibold transition-colors">ออกจากระบบ</button>
+                </div>
+            </div>
+
+            <!-- ส่วนหัวโลโก้และชื่อเอกสาร -->
+            <div class="bg-primary text-white py-4 px-6 relative flex items-center justify-between overflow-hidden border-b-4 border-blue-400">
+                <div class="flex-shrink-0 z-10">
+                   <img src="https://i.postimg.cc/qM0P2y4y/message-Image-1787986866051-Copy.jpg" alt="Logo" class="h-16 object-contain bg-white p-1 rounded shadow-md" />
+                </div>
+                <div class="flex-1 z-10 px-4">
+                    <h1 class="text-center text-2xl md:text-3xl font-bold tracking-wider mb-1">ตารางการวิเคราะห์ปัญหาเพื่อป้องกันการเกิดซ้ำ</h1>
+                    <h2 class="text-center text-base md:text-lg font-light text-blue-100">พร้อมระบุ Time Frame</h2>
+                </div>
+                <div class="flex-shrink-0 z-10 text-right print-hidden">
+                    <button onclick="window.print()" class="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded shadow flex items-center justify-center gap-2 transition-colors border border-white/50">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg> พิมพ์ PDF
+                    </button>
+                </div>
+            </div>
+
+            <!-- ตารางข้อมูลหลัก -->
+            <div class="overflow-x-auto p-4 bg-white">
+                <table class="w-full border-collapse border-2 border-primary min-w-[1500px]">
+                    <thead>
+                        <tr class="bg-primary text-white text-center">
+                            <th class="border-2 border-primary p-2 w-10 font-semibold">No.</th>
+                            <th class="border-2 border-primary p-2 w-28 font-semibold">ว/ด/ป</th>
+                            <th class="border-2 border-primary p-2 w-48 font-semibold">ปัญหา</th>
+                            <th class="border-2 border-primary p-2 w-32 font-semibold">ประเภทปัญหา<br><span class="text-xs font-normal text-blue-200">เรื้อรัง=ร, ครั้งคราว=ค, ผิดปกติ=ผ</span></th>
+                            <th class="border-2 border-primary p-2 w-48 font-semibold">การจัดการเบื้องต้น<br><span class="text-xs font-normal text-blue-200">Correction ที่มีอยู่</span></th>
+                            <th class="border-2 border-primary p-2 w-48 font-semibold">ต้นเหตุของปัญหา</th>
+                            <th class="border-2 border-primary p-2 w-40 font-semibold">ประเภทต้นเหตุ<br><span class="text-xs font-normal text-blue-200">1.ออกแบบ 2.ขาดPM<br>3.PMไม่ครบ 4.ใช้งานผิด 5.ไฟฟ้า</span></th>
+                            <th class="border-2 border-primary p-2 w-48 font-semibold">การแก้ไขและป้องกัน</th>
+                            <th class="border-2 border-primary p-2 w-40 font-semibold">การขยายผล</th>
+                            <th class="border-2 border-primary p-2 w-32 font-semibold">กำหนดการ</th>
+                            <th class="border-2 border-primary p-2 w-32 font-semibold">เสร็จจริง</th>
+                            <th class="border-2 border-primary p-2 w-36 font-semibold">สถานะ</th>
+                            <th class="border-2 border-primary p-2 w-16 font-semibold print-hidden">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        <!-- Rows rendered dynamically -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- ปุ่มเพิ่มตารางและปุ่มซ่อนแถว -->
+            <div class="px-4 py-3 bg-blue-50 flex justify-center gap-4 print-hidden border-t-2 border-b-2 border-primary">
+                <button onclick="addNewRow()" class="flex items-center gap-2 bg-primary text-white hover:bg-blue-800 px-6 py-2 rounded-full font-bold transition-colors shadow border border-primary">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    เพิ่มแถวตาราง (สร้างข้อมูลใหม่)
+                </button>
+                <button id="toggleRowsBtn" onclick="toggleShowAllRows()" class="hidden flex items-center gap-2 bg-white text-primary hover:bg-blue-100 px-6 py-2 rounded-full font-bold transition-colors shadow border border-primary">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
+                    <span id="toggleRowsText">แสดงทั้งหมด</span>
+                </button>
+            </div>
+
+            <!-- ส่วน Footer สรุปผลและข้อมูลเพิ่มเติม -->
+            <div class="p-4 bg-white flex-1">
+                <div class="flex flex-wrap items-stretch gap-2 mb-6 justify-between" id="summaryContainer">
+                    <div class="bg-gray-200 px-4 py-2 rounded-lg font-bold text-gray-700 text-lg flex items-center justify-center shadow-sm border border-gray-300">
+                        ACTION SUMMARY
+                    </div>
+                    <div class="bg-[#1e73be] text-white px-4 py-2 rounded shadow-sm font-semibold flex items-center gap-3 text-lg min-w-[180px] justify-between">
+                        <span>งานทั้งหมด:</span>
+                        <div><span id="sumTotal" class="text-2xl font-bold">0</span> <span class="text-sm">รายการ</span></div>
+                    </div>
+                    <div class="bg-[#27ae60] text-white px-4 py-2 rounded shadow-sm font-semibold flex items-center gap-3 text-lg min-w-[180px] justify-between">
+                        <span>เสร็จแล้ว:</span>
+                        <div class="text-right flex items-center gap-2">
+                            <div><span id="sumCompleted" class="text-2xl font-bold">0</span> <span class="text-sm">รายการ</span></div>
+                            <div id="pctCompleted" class="text-sm opacity-90">0%</div>
+                        </div>
+                    </div>
+                    <div class="bg-[#f39c12] text-gray-900 px-4 py-2 rounded shadow-sm font-semibold flex items-center gap-3 text-lg min-w-[180px] justify-between">
+                        <span>กำลังดำเนินการ:</span>
+                        <div class="text-right flex items-center gap-2">
+                            <div><span id="sumInProgress" class="text-2xl font-bold">0</span> <span class="text-sm">รายการ</span></div>
+                            <div id="pctInProgress" class="text-sm opacity-90">0%</div>
+                        </div>
+                    </div>
+                    <div class="bg-[#c0392b] text-white px-4 py-2 rounded shadow-sm font-semibold flex items-center gap-3 text-lg min-w-[180px] justify-between">
+                        <span>ล่าช้า/ติดปัญหา:</span>
+                        <div class="text-right flex items-center gap-2">
+                            <div><span id="sumDelayed" class="text-2xl font-bold">0</span> <span class="text-sm">รายการ</span></div>
+                            <div id="pctDelayed" class="text-sm opacity-90">0%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-base text-primary mt-6" id="footerForm">
+                    <div class="flex flex-col justify-end">
+                        <div class="flex items-end">
+                            <span class="font-semibold whitespace-nowrap mr-2">ประเด็นสำคัญที่ต้องการการสนับสนุน:</span>
+                            <input type="text" id="support" data-field="support" class="footer-input flex-1 border-b-2 border-primary bg-transparent outline-none pb-1 focus:border-blue-500 font-medium" />
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 gap-4">
+                        <div class="flex items-end">
+                            <span class="font-semibold whitespace-nowrap mr-2">ผู้รับผิดชอบติดตามครั้งถัดไป:</span>
+                            <input type="text" id="nextFollower" data-field="nextFollower" class="footer-input flex-1 border-b-2 border-primary bg-transparent outline-none pb-1 focus:border-blue-500 font-medium" />
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="flex items-end">
+                                <span class="font-semibold whitespace-nowrap mr-2">วันที่ติดตามครั้งถัดไป:</span>
+                                <input type="date" id="nextDate" data-field="nextDate" class="footer-input flex-1 border-b-2 border-primary bg-transparent outline-none pb-1 text-center focus:border-blue-500 font-bold" />
+                            </div>
+                            <div class="flex items-end">
+                                <span class="font-semibold whitespace-nowrap mr-2">ผู้อนุมัติ / หัวหน้างาน:</span>
+                                <input type="text" id="approver" data-field="approver" class="footer-input flex-1 border-b-2 border-primary bg-transparent outline-none pb-1 focus:border-blue-500 font-medium" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- แถบด้านล่างสุดบริษัท -->
+            <div class="bg-primary text-white py-2 w-full overflow-hidden relative shadow-inner rounded-b-lg border-t-2 border-blue-400 print-hidden">
+                <div class="whitespace-nowrap animate-marquee w-full font-light tracking-wide flex items-center">
+                    <svg class="w-4 h-4 inline mr-2 text-blue-300" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a8 8 0 100 16 8 8 0 000-16zM9 9V5a1 1 0 112 0v4h3a1 1 0 110 2h-4a1 1 0 01-1-1z"></path></svg>
+                    Able Medical Company Limited ( บริษัท เอเบิ้ล เมดิคอล จำกัด ) พัฒนาโดย ฝ่าย PE
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- สคริปต์การทำงาน JavaScript -->
+    <script>
+        // === การตั้งค่า URL ของ Google Apps Script ===
+        const GAS_URL = 'https://script.google.com/macros/s/AKfycbw9M2ySy7eSOyAHxq7zbzmqRklGXPn3sYBggO2mC-M0Ymwra_WTgP0cBnoJY7QBJtoX/exec';
+        
+        const STATUS_OPTIONS = { NOT_STARTED: 'ยังไม่เริ่ม', IN_PROGRESS: 'กำลังดำเนินการ', COMPLETED: 'เสร็จแล้ว', DELAYED: 'ล่าช้า / ติดปัญหา' };
+        const STATUS_COLORS = {
+            [STATUS_OPTIONS.NOT_STARTED]: 'bg-gray-300 text-gray-800',
+            [STATUS_OPTIONS.IN_PROGRESS]: 'bg-yellow-400 text-gray-900',
+            [STATUS_OPTIONS.COMPLETED]: 'bg-green-500 text-white',
+            [STATUS_OPTIONS.DELAYED]: 'bg-red-600 text-white'
+        };
+
+        const PROB_TYPES = ['', 'เรื้อรัง (ร)', 'ครั้งคราว (ค)', 'ผิดปกติ (ผ)'];
+        const CAUSE_TYPES = ['', '1. การออกแบบ', '2. ขาด PM', '3. PMไม่ครบในจุดนี้', '4. ใช้งานผิด', '5. ไฟฟ้าผิดปกติ'];
+
+        // สถานะของแอปพลิเคชัน
+        let state = {
+            activeTab: 'PD1',
+            currentMonth: new Date().toISOString().slice(0,7), 
+            filterType: 'MONTH',
+            filterDay: new Date().toISOString().slice(0,10),
+            headers: {},
+            rows: [],
+            editModeRows: new Set(),
+            showAll: false // ควบคุมการโชว์ทั้งหมดหรือ 5 แถว
+        };
+
+        const DOM = {
+            login: document.getElementById('loginScreen'),
+            app: document.getElementById('appContainer'),
+            loader: document.getElementById('loadingOverlay'),
+            loaderText: document.getElementById('loadingText'),
+            tabs: document.querySelectorAll('.tab-btn'),
+            tableBody: document.getElementById('tableBody'),
+            infoInputs: document.querySelectorAll('.footer-input'),
+            toggleBtn: document.getElementById('toggleRowsBtn'),
+            toggleText: document.getElementById('toggleRowsText')
+        };
+
+        // ==========================================
+        // ฟังก์ชันช่วยจัดการ Format วันที่เพื่อให้อินพุตแสดงผลถูกต้อง (YYYY-MM-DD) เสมอ
+        // ==========================================
+        function formatDateForInput(dateStr) {
+            if (!dateStr) return '';
+            
+            // กรณีเป็น Format YYYY-MM-DD อยู่แล้ว
+            if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+                return dateStr.substring(0, 10);
+            }
+            
+            try {
+                // แปลง Format อื่นๆ ให้เป็นวันที่ของ Local (เพื่อป้องกันปัญหาวันที่เลื่อนจาก Timezone)
+                const d = new Date(dateStr);
+                if (!isNaN(d.getTime())) {
+                    const y = d.getFullYear();
+                    const m = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    return `${y}-${m}-${day}`;
+                }
+            } catch(e) {
+                console.error("Date formatting error:", e);
+            }
+            return '';
+        }
+
+        // ==========================================
+        // ระบบตั้งค่าเริ่มต้น (Init) และล็อกอิน
+        // ==========================================
+        function init() {
+            document.getElementById('filterMonth').value = state.currentMonth;
+            document.getElementById('filterDay').value = state.filterDay;
+            
+            if (localStorage.getItem('auth') === 'true') {
+                showApp();
+            } else {
+                DOM.login.classList.remove('hidden');
+                DOM.app.classList.add('hidden');
+            }
+            attachListeners();
+        }
+
+        function handleLogin() {
+            const id = document.getElementById('loginId').value.toLowerCase();
+            const pass = document.getElementById('loginPass').value.toLowerCase();
+            if (id === 'pemc' && pass === 'mc001') {
+                localStorage.setItem('auth', 'true');
+                document.getElementById('loginError').classList.add('hidden');
+                showApp();
+            } else {
+                document.getElementById('loginError').classList.remove('hidden');
+            }
+        }
+        
+        document.getElementById('loginPass').addEventListener('keypress', function(e) {
+            if(e.key === 'Enter') handleLogin();
+        });
+
+        function handleLogout() {
+            localStorage.removeItem('auth');
+            DOM.app.classList.add('hidden');
+            DOM.login.classList.remove('hidden');
+        }
+
+        function showApp() {
+            DOM.login.classList.add('hidden');
+            DOM.app.classList.remove('hidden');
+            syncDataFromSheet();
+        }
+
+        function showLoader(text) {
+            DOM.loaderText.textContent = text || 'กำลังประมวลผล...';
+            DOM.loader.classList.remove('hidden');
+        }
+
+        function hideLoader() {
+            DOM.loader.classList.add('hidden');
+        }
+
+        function attachListeners() {
+            DOM.tabs.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    state.activeTab = e.target.dataset.tab;
+                    DOM.tabs.forEach(b => {
+                        if(b.dataset.tab === state.activeTab) b.className = 'tab-btn px-6 py-2 rounded-t-lg font-bold text-lg border-2 border-b-0 transition-colors bg-primary text-white border-primary';
+                        else b.className = 'tab-btn px-6 py-2 rounded-t-lg font-bold text-lg border-2 border-b-0 transition-colors bg-white text-primary border-primary hover:bg-blue-50';
+                    });
+                    syncDataFromSheet();
+                });
+            });
+
+            document.getElementById('filterType').addEventListener('change', (e) => {
+                state.filterType = e.target.value;
+                document.getElementById('filterMonth').classList.toggle('hidden', state.filterType === 'DAY');
+                document.getElementById('filterDay').classList.toggle('hidden', state.filterType === 'MONTH');
+                renderTable();
+            });
+
+            document.getElementById('filterMonth').addEventListener('change', (e) => {
+                state.currentMonth = e.target.value; 
+                syncDataFromSheet();
+            });
+            
+            document.getElementById('filterDay').addEventListener('change', (e) => {
+                state.filterDay = e.target.value;
+                const newMonth = state.filterDay.slice(0,7);
+                if (newMonth !== state.currentMonth) {
+                    state.currentMonth = newMonth;
+                    document.getElementById('filterMonth').value = newMonth;
+                    syncDataFromSheet();
+                } else {
+                    renderTable();
+                }
+            });
+        }
+
+        // ==========================================
+        // การเชื่อมต่อ API กับ Google Sheets
+        // ==========================================
+        async function apiCall(action, payloadData) {
+            try {
+                const response = await fetch(GAS_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ action: action, data: payloadData })
+                });
+                const result = await response.json();
+                if (!result.success) throw new Error(result.error);
+                return result.data;
+            } catch (error) {
+                console.error("API Error:", error);
+                alert("เกิดข้อผิดพลาดในการเชื่อมต่อ: " + error.message);
+                throw error;
+            }
+        }
+
+        async function syncDataFromSheet() {
+            showLoader(`กำลังดึงข้อมูล ${state.activeTab} (${state.currentMonth})...`);
+            try {
+                const data = await apiCall('getData', { pd: state.activeTab, month: state.currentMonth });
+                state.headers = data.headersInfo || {};
+                state.rows = data.rows || [];
+                state.editModeRows.clear();
+                
+                // กำหนดค่า Footer และบังคับ Format วันที่
+                DOM.infoInputs.forEach(input => {
+                    let val = state.headers[input.dataset.field] || '';
+                    if (input.type === 'date') val = formatDateForInput(val);
+                    input.value = val;
+                });
+                
+                renderTable();
+            } catch (e) {
+                console.error("Sync error: ", e);
+            }
+            hideLoader();
+        }
+
+        function getFilteredRows() {
+            if (state.filterType === 'MONTH') return state.rows;
+            // ใช้ formatDateForInput เปรียบเทียบป้องกัน Format ผิดเพี้ยน
+            const targetFormat = formatDateForInput(state.filterDay);
+            return state.rows.filter(row => formatDateForInput(row.targetDate) === targetFormat);
+        }
+
+        function generateId() {
+            return Date.now().toString(36) + Math.random().toString(36).substr(2);
+        }
+
+        function addNewRow() {
+            const newRow = {
+                id: generateId(), dateStr: state.filterDay, problem: '', probType: '', 
+                initCorrection: '', rootCause: '', causeType: '', actionPlan: '', 
+                expansion: '', targetDate: state.filterDay, actualDate: '', 
+                status: STATUS_OPTIONS.NOT_STARTED
+            };
+            state.rows.push(newRow);
+            state.editModeRows.add(newRow.id);
+            state.showAll = true; // บังคับให้แสดงทั้งหมดเพื่อให้เห็นแถวใหม่ที่เพิ่มด้านล่างสุด
+            renderTable();
+        }
+
+        function toggleShowAllRows() {
+            state.showAll = !state.showAll;
+            renderTable();
+        }
+
+        // ==========================================
+        // การกระทำบันทึก ลบ แก้ไข (CRUD)
+        // ==========================================
+        window.toggleEdit = function(id) {
+            state.editModeRows.add(id);
+            renderTable();
+        }
+
+        window.saveRowData = async function(id) {
+            const tr = document.querySelector(`tr[data-id="${id}"]`);
+            const rowData = { id: id };
+            
+            // เก็บข้อมูลจาก Table
+            tr.querySelectorAll('[data-field]').forEach(input => {
+                let val = input.value;
+                if(input.type === 'date') val = formatDateForInput(val); // บังคับ Format ก่อนส่งกลับไป
+                rowData[input.dataset.field] = val;
+            });
+            
+            // เก็บข้อมูล Footer
+            const headersInfo = {};
+            DOM.infoInputs.forEach(input => { 
+                let val = input.value;
+                if(input.type === 'date') val = formatDateForInput(val);
+                headersInfo[input.dataset.field] = val; 
+            });
+
+            showLoader('กำลังบันทึกข้อมูลและส่งแจ้งเตือน...');
+            try {
+                await apiCall('saveRow', { pd: state.activeTab, month: state.currentMonth, row: rowData, headersInfo: headersInfo });
+                const idx = state.rows.findIndex(r => r.id === id);
+                if (idx > -1) state.rows[idx] = rowData;
+                
+                state.editModeRows.delete(id);
+                renderTable();
+            } catch (e) {
+                console.error("Save error: ", e);
+            }
+            hideLoader();
+        }
+
+        window.deleteRowData = async function(id) {
+            if(!confirm('คุณต้องการลบข้อมูลแถวนี้ใช่หรือไม่?')) return;
+            
+            showLoader('กำลังลบข้อมูลและส่งแจ้งเตือน...');
+            try {
+                await apiCall('deleteRow', { pd: state.activeTab, month: state.currentMonth, id: id });
+                state.rows = state.rows.filter(r => r.id !== id);
+                state.editModeRows.delete(id);
+                renderTable();
+            } catch (e) {
+                console.error("Delete error: ", e);
+            }
+            hideLoader();
+        }
+
+        // ==========================================
+        // การเรนเดอร์ตารางผลลัพธ์
+        // ==========================================
+        
+        // ฟังก์ชันช่วยขยายความสูงของ Textarea ให้พอดีกับข้อความด้านใน
+        function autoResizeTextarea(el) {
+            el.style.height = 'auto';
+            el.style.height = (el.scrollHeight) + 'px';
+        }
+
+        // จับ Event ก่อนพิมพ์ ให้ขยายทุกกล่องข้อความ
+        window.addEventListener('beforeprint', () => {
+            document.querySelectorAll('textarea').forEach(autoResizeTextarea);
+        });
+
+        function renderTable() {
+            const allFilteredRows = getFilteredRows();
+            const displayedRows = state.showAll ? allFilteredRows : allFilteredRows.slice(0, 5);
+            
+            // จัดการปุ่มแสดงทั้งหมด/ซ่อน
+            if (allFilteredRows.length > 5) {
+                DOM.toggleBtn.classList.remove('hidden');
+                DOM.toggleText.textContent = state.showAll ? 'แสดง 5 แถว' : 'แสดงทั้งหมด';
+            } else {
+                DOM.toggleBtn.classList.add('hidden');
+            }
+
+            let html = '';
+
+            displayedRows.forEach((row, index) => {
+                const isEditing = state.editModeRows.has(row.id);
+                const disabledAttr = isEditing ? '' : 'disabled';
+                
+                const statusOptionsHTML = Object.values(STATUS_OPTIONS).map(opt => 
+                    `<option value="${opt}" ${row.status === opt ? 'selected' : ''} class="bg-white text-black">${opt}</option>`
+                ).join('');
+
+                const probTypeOptionsHTML = PROB_TYPES.map(opt => 
+                    `<option value="${opt}" ${row.probType === opt ? 'selected' : ''}>${opt || '-'}</option>`
+                ).join('');
+
+                const causeTypeOptionsHTML = CAUSE_TYPES.map(opt => 
+                    `<option value="${opt}" ${row.causeType === opt ? 'selected' : ''}>${opt || '-'}</option>`
+                ).join('');
+                
+                html += `
+                <tr class="bg-white hover:bg-blue-50 transition-colors" data-id="${row.id}">
+                    <td class="border-2 border-primary p-1 text-center font-bold">${index + 1}</td>
+                    <td class="border-2 border-primary p-0 relative">
+                        <input type="date" data-field="dateStr" ${disabledAttr} value="${formatDateForInput(row.dateStr)}" class="w-full h-full p-2 outline-none bg-transparent text-primary text-center text-xs font-medium" />
+                    </td>
+                    <td class="border-2 border-primary p-0 relative"><textarea data-field="problem" ${disabledAttr} oninput="autoResizeTextarea(this)" class="w-full h-full p-2 outline-none resize-none min-h-[60px] bg-transparent text-primary overflow-hidden">${row.problem}</textarea></td>
+                    <td class="border-2 border-primary p-1 text-center align-middle">
+                        <select data-field="probType" ${disabledAttr} class="w-full p-1 rounded outline-none text-sm cursor-pointer border bg-white text-center">
+                            ${probTypeOptionsHTML}
+                        </select>
+                    </td>
+                    <td class="border-2 border-primary p-0 relative"><textarea data-field="initCorrection" ${disabledAttr} oninput="autoResizeTextarea(this)" class="w-full h-full p-2 outline-none resize-none min-h-[60px] bg-transparent text-primary overflow-hidden">${row.initCorrection}</textarea></td>
+                    <td class="border-2 border-primary p-0 relative"><textarea data-field="rootCause" ${disabledAttr} oninput="autoResizeTextarea(this)" class="w-full h-full p-2 outline-none resize-none min-h-[60px] bg-transparent text-primary overflow-hidden">${row.rootCause}</textarea></td>
+                    <td class="border-2 border-primary p-1 text-center align-middle">
+                        <select data-field="causeType" ${disabledAttr} class="w-full p-1 rounded outline-none text-sm cursor-pointer border bg-white text-center">
+                            ${causeTypeOptionsHTML}
+                        </select>
+                    </td>
+                    <td class="border-2 border-primary p-0 relative"><textarea data-field="actionPlan" ${disabledAttr} oninput="autoResizeTextarea(this)" class="w-full h-full p-2 outline-none resize-none min-h-[60px] bg-transparent text-primary overflow-hidden">${row.actionPlan}</textarea></td>
+                    <td class="border-2 border-primary p-0 relative"><textarea data-field="expansion" ${disabledAttr} oninput="autoResizeTextarea(this)" class="w-full h-full p-2 outline-none resize-none min-h-[60px] bg-transparent text-primary overflow-hidden">${row.expansion}</textarea></td>
+                    <td class="border-2 border-primary p-0 relative">
+                        <input type="date" data-field="targetDate" ${disabledAttr} value="${formatDateForInput(row.targetDate)}" class="w-full h-full p-2 outline-none bg-transparent text-primary text-center text-xs font-medium" title="วันที่สำหรับคัดกรอง" />
+                    </td>
+                    <td class="border-2 border-primary p-0 relative">
+                        <input type="date" data-field="actualDate" ${disabledAttr} value="${formatDateForInput(row.actualDate)}" class="w-full h-full p-2 outline-none bg-transparent text-primary text-center text-xs font-medium" />
+                    </td>
+                    <td class="border-2 border-primary p-1 text-center align-middle">
+                        <select data-field="status" ${disabledAttr} class="w-full p-2 rounded outline-none font-semibold text-center cursor-pointer border shadow-sm ${STATUS_COLORS[row.status] || STATUS_COLORS[STATUS_OPTIONS.NOT_STARTED]}">
+                            ${statusOptionsHTML}
+                        </select>
+                    </td>
+                    
+                    <td class="border-2 border-primary p-2 text-center align-middle print-hidden w-16">
+                        <div class="flex flex-col gap-2 items-center justify-center">
+                            ${isEditing ? 
+                                `<button onclick="saveRowData('${row.id}')" class="bg-green-500 text-white p-2 rounded hover:bg-green-600 shadow" title="บันทึก">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                                 </button>` : 
+                                `<button onclick="toggleEdit('${row.id}')" class="bg-yellow-400 text-white p-2 rounded hover:bg-yellow-500 shadow" title="แก้ไข">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                                 </button>`
+                            }
+                            <button onclick="deleteRowData('${row.id}')" class="bg-red-500 text-white p-2 rounded hover:bg-red-600 shadow" title="ลบ">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </div>
+                    </td>
+                </tr>`;
+            });
+
+            DOM.tableBody.innerHTML = html;
+            
+            // ขยายความสูงของกล่องข้อความให้พอดีกับเนื้อหาทันทีที่โหลดเสร็จ
+            setTimeout(() => {
+                document.querySelectorAll('textarea').forEach(autoResizeTextarea);
+            }, 10);
+            
+            // ตั้งค่าให้เปลี่ยนสีทันทีเวลาปรับกล่องสถานะ
+            DOM.tableBody.querySelectorAll('select[data-field="status"]').forEach(select => {
+                select.addEventListener('change', (e) => {
+                    const newStatus = e.target.value;
+                    e.target.className = `w-full p-2 rounded outline-none font-semibold text-center shadow-sm cursor-pointer border ${STATUS_COLORS[newStatus]}`;
+                    Array.from(e.target.options).forEach(opt => opt.className = 'bg-white text-black');
+                });
+            });
+
+            updateSummary(allFilteredRows);
+        }
+
+        function updateSummary(filteredRows) {
+            let total = 0, completed = 0, inProgress = 0, delayed = 0;
+
+            filteredRows.forEach(row => {
+                if (row.problem?.trim() !== '' || row.status !== STATUS_OPTIONS.NOT_STARTED) {
+                    total++;
+                    if (row.status === STATUS_OPTIONS.COMPLETED) completed++;
+                    if (row.status === STATUS_OPTIONS.IN_PROGRESS) inProgress++;
+                    if (row.status === STATUS_OPTIONS.DELAYED) delayed++;
+                }
+            });
+
+            const getPercent = (val) => total === 0 ? 0 : Math.round((val / total) * 100);
+
+            document.getElementById('sumTotal').textContent = total;
+            document.getElementById('sumCompleted').textContent = completed;
+            document.getElementById('pctCompleted').textContent = `(${getPercent(completed)}%)`;
+            document.getElementById('sumInProgress').textContent = inProgress;
+            document.getElementById('pctInProgress').textContent = `(${getPercent(inProgress)}%)`;
+            document.getElementById('sumDelayed').textContent = delayed;
+            document.getElementById('pctDelayed').textContent = `(${getPercent(delayed)}%)`;
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
